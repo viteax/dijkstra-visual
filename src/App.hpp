@@ -19,7 +19,11 @@ public:
 
 private:
     void handleEvent(const sf::Event& event);
-    void recompute();
+    void recompute(bool restartAnimation = false);
+    void startAnimation(bool play);
+    void stopAnimation();
+    void setStep(int step);
+    void advanceAnimation(float seconds);
     void fitView();
     void updateViews();
     void zoomAt(sf::Vector2i pixel, float factor);
@@ -34,6 +38,16 @@ private:
     int hovered_ = -1;
     bool showHelp_ = true;
 
+    // Step-by-step mode
+    Trace trace_;
+    Snapshot snapshot_;
+    bool animating_ = false;
+    bool playing_ = false;
+    int step_ = 0;
+    float stepTimer_ = 0.f;
+    float stepsPerSecond_ = 1.5f;
+
+    sf::Clock clock_;
     sf::RenderWindow window_;
     Renderer renderer_;
     sf::View worldView_;

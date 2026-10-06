@@ -56,7 +56,17 @@ int App::run()
             handleEvent(event);
         }
 
-        const Scene scene{graph_, paths_, start_, end_, pendingLink_, hovered_, showHelp_};
+        advanceAnimation(clock_.restart().asSeconds());
+
+        Scene scene{graph_, paths_, start_, end_, pendingLink_, hovered_, showHelp_};
+        if (animating_)
+        {
+            scene.snapshot = &snapshot_;
+            scene.step = step_;
+            scene.stepCount = static_cast<int>(trace_.size());
+            scene.playing = playing_;
+            scene.stepsPerSecond = stepsPerSecond_;
+        }
 
         window_.clear(theme::BACKGROUND);
         window_.setView(worldView_);
@@ -115,7 +125,7 @@ void App::handleEvent(const sf::Event& event)
         if (event.mouseButton.button == sf::Mouse::Left && node != start_)
         {
             start_ = node;
-            recompute();
+            recompute(true);
         }
         else if (event.mouseButton.button == sf::Mouse::Right)
         {
@@ -176,7 +186,50 @@ void App::handleEvent(const sf::Event& event)
             fitView();
             break;
         case sf::Keyboard::Scan::Escape:
-            pendingLink_ = -1;
+            if (pendingLink_ != -1)
+            {
+                pendingLink_ = -1;
+            }
+            else
+            {
+                stopAnimation();
+            }
+            break;
+        case sf::Keyboard::Scan::S:
+            animating_ ? stopAnimation() : startAnimation(false);
+            break;
+        case sf::Keyboard::Scan::Space:
+            if (!animating_ || step_ >= static_cast<int>(trace_.size()))
+            {
+                startAnimation(true); // also restarts a finished run
+            }
+            else
+            {
+                playing_ = !playing_;
+            }
+            break;
+        case sf::Keyboard::Scan::Right:
+        case sf::Keyboard::Scan::Left:
+            if (!animating_)
+            {
+                startAnimation(false);
+            }
+            playing_ = false;
+            setStep(step_ + (event.key.scancode == sf::Keyboard::Scan::Right ? 1 : -1));
+            break;
+        case sf::Keyboard::Scan::End:
+            if (!animating_)
+            {
+                startAnimation(false);
+            }
+            playing_ = false;
+            setStep(static_cast<int>(trace_.size()));
+            break;
+        case sf::Keyboard::Scan::Up:
+            stepsPerSecond_ = std::min(stepsPerSecond_ * 1.5f, 16.f);
+            break;
+        case sf::Keyboard::Scan::Down:
+            stepsPerSecond_ = std::max(stepsPerSecond_ / 1.5f, 0.25f);
             break;
         default:
             break;
@@ -189,9 +242,58 @@ void App::handleEvent(const sf::Event& event)
     }
 }
 
-void App::recompute()
+void App::recompute(bool restartAnimation)
 {
-    paths_ = dijkstra(graph_, start_);
+    paths_ = dijkstra(graph_, start_, &trace_);
+
+    if (animating_)
+    {
+        if (restartAnimation)
+        {
+            playing_ = false;
+            step_ = 0;
+        }
+        setStep(step_); // clamps to the new trace and refreshes the snapshot
+    }
+}
+
+void App::startAnimation(bool play)
+{
+    animating_ = true;
+    playing_ = play;
+    stepTimer_ = 0.f;
+    setStep(0);
+}
+
+void App::stopAnimation()
+{
+    animating_ = false;
+    playing_ = false;
+}
+
+void App::setStep(int step)
+{
+    step_ = std::clamp(step, 0, static_cast<int>(trace_.size()));
+    snapshot_ = snapshotAt(graph_.nodeCount(), start_, trace_, step_);
+}
+
+void App::advanceAnimation(float seconds)
+{
+    if (!animating_ || !playing_)
+    {
+        return;
+    }
+
+    stepTimer_ += seconds * stepsPerSecond_;
+    while (stepTimer_ >= 1.f && playing_)
+    {
+        stepTimer_ -= 1.f;
+        setStep(step_ + 1);
+        if (step_ >= static_cast<int>(trace_.size()))
+        {
+            playing_ = false;
+        }
+    }
 }
 
 void App::fitView()
