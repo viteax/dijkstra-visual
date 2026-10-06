@@ -1,6 +1,16 @@
-x64/
-Dijkstrah's Algorithm Visualization/x64/
+# Build output
+build/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+
+# Visual Studio
 .vs/
-Dijkstrah's Algorithm Visualization/*.vcxproj
-Dijkstrah's Algorithm Visualization/*.vcxproj.filters
-Dijkstrah's Algorithm Visualization/*.vcxproj.user
+x64/
+*.vcxproj*
+*.user
+
+# IDEs and OS
+.idea/
+.vscode/
+.DS_Store
