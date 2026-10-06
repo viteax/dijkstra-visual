@@ -12,6 +12,9 @@ const sf::Color EDGE(96, 106, 135, 150);
 const sf::Color EDGE_LABEL(139, 148, 176);
 const sf::Color PATH(64, 224, 168);
 
+const sf::Color RELAX(255, 159, 67);
+const sf::Color SETTLED_FILL(28, 88, 74);
+
 const sf::Color NODE_FILL(38, 43, 61);
 const sf::Color NODE_OUTLINE(122, 133, 168);
 const sf::Color NODE_UNREACHABLE_FILL(28, 31, 43);

@@ -6,10 +6,19 @@ An interactive visualization of Dijkstra's shortest path algorithm, written in C
 
 Pick a start and an end node and the shortest route lights up immediately. Edit the graph while the program is running and the result is recalculated on the fly.
 
+## Download
+
+Ready-to-run builds for Windows, Linux and macOS (Apple Silicon) are on the [Releases page](../../releases). Unpack the archive and run `dijkstra-visual`; nothing else has to be installed. Without arguments the program asks in the console whether to load the sample graph (`F`) or generate a random one (`R`).
+
+- **Windows:** SmartScreen may warn about an unsigned app; choose "More info" and "Run anyway".
+- **macOS:** the app isn't notarized. Remove the quarantine flag once with `xattr -dr com.apple.quarantine dijkstra-visual/` and run it from the terminal.
+- **Linux:** needs the usual desktop libraries (X11, OpenGL, FreeType), which every desktop distribution has.
+
 ## Features
 
 - Build a graph from files or generate a random connected one
 - Left click sets the start, right click sets the end, the shortest path and its length are highlighted
+- Step-by-step mode: watch nodes get settled and edges relaxed, play it, pause it or go back and forth one step at a time
 - Add nodes and links with the keyboard, with no restart needed
 - Smooth zoom towards the cursor, panning, resizable window, anti-aliased graphics
 - Hover over a node to see its distance from the start
@@ -26,10 +35,21 @@ Pick a start and an end node and the shortest route lights up immediately. Edit 
 | Middle drag    | Pan the view                                              |
 | Mouse wheel    | Zoom                                                      |
 | `Home`         | Fit the whole graph into the window                       |
-| `Esc`          | Cancel a link that is being created                       |
+| `S`            | Turn the step-by-step mode on or off                      |
+| `Space`        | Play or pause the animation (starts it, or restarts a finished one) |
+| `Left` / `Right` | Go one step back or forward                             |
+| `Up` / `Down`  | Change the animation speed                                |
+| `End`          | Jump to the end of the algorithm                          |
+| `Esc`          | Cancel a link that is being created, or leave the step-by-step mode |
 | `H`            | Show or hide the help panel                               |
 
 Shortcuts use physical key positions, so they work on any keyboard layout.
+
+## Step-by-step mode
+
+![Step-by-step mode](docs/animation.png)
+
+Press `S` (or `Space`) to watch the algorithm work. Nodes with a known distance get an orange outline and a label, settled nodes turn green, and the green edges form the tree of the best routes found so far. The edges examined by the latest step are drawn in orange. Choosing a new start node restarts the animation, and nodes or links you add while it runs are taken into account.
 
 ## Building
 
@@ -52,7 +72,24 @@ cmake --build build --config Release
 build\Release\dijkstra-visual.exe
 ```
 
-The `assets` and `data` folders are copied next to the executable after each build.
+The `assets` and `data` folders are copied next to the executable after each build, and the program looks for them there first.
+
+To get a self-contained folder like the one in the release archives:
+
+```sh
+cmake --install build --component app --prefix dist/dijkstra-visual
+```
+
+## Releasing
+
+Releases are built by GitHub Actions. Push a tag that starts with `v` and the workflow builds the three packages and attaches them to a new GitHub Release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Every pull request builds the same packages too; they can be downloaded from the workflow run's artifacts.
 
 ## Running
 
@@ -95,7 +132,7 @@ src/
   Theme.hpp      colours
   Config.hpp     sizes and limits
   Graph.*        graph with nodes on a plane
-  Dijkstra.*     the algorithm (binary heap, O((V + E) log V))
+  Dijkstra.*     the algorithm (binary heap, O((V + E) log V)) and its step trace
   GraphIO.*      loading files and random generation
 assets/          font
 data/            sample graph

@@ -1,0 +1,76 @@
+name: Release
+
+# Pull requests and manual runs only build the packages (download them from the run's
+# artifacts); pushing a tag like v1.0.0 also publishes them as a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-latest
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SFML build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxrandr-dev libxcursor-dev libudev-dev \
+            libfreetype-dev libgl-dev
+
+      # SFML is always downloaded and linked statically, so the package is self-contained.
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_SFML=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Install
+        run: cmake --install build --config Release --component app --prefix dist/dijkstra-visual
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/dijkstra-visual -DestinationPath dijkstra-visual-${{ matrix.name }}.zip
+
+      - name: Archive (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: tar -czf dijkstra-visual-${{ matrix.name }}.tar.gz -C dist dijkstra-visual
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dijkstra-visual-${{ matrix.name }}
+          path: |
+            dijkstra-visual-${{ matrix.name }}.zip
+            dijkstra-visual-${{ matrix.name }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" packages/* --repo "${{ github.repository }}" --title "${{ github.ref_name }}" --generate-notes

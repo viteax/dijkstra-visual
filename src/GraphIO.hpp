@@ -18,7 +18,8 @@ bool loadNodes(const std::string& path, Graph& graph);
 // reported on stderr and skipped. Returns false if the file can't be opened.
 bool loadLinks(const std::string& path, Graph& graph);
 
-// Looks for `relativePath` in the working directory and then in the source tree.
+// Looks for `relativePath` next to the executable, then in the working directory,
+// then in the source tree the program was built from.
 std::string findResource(const std::string& relativePath);
 
 } // namespace dv

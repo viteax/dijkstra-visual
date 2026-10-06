@@ -9,6 +9,13 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 namespace dv
 {
 
@@ -98,10 +105,51 @@ bool loadLinks(const std::string& path, Graph& graph)
     return true;
 }
 
+namespace
+{
+
+// Folder of the running executable, or an empty path if it can't be determined.
+std::filesystem::path executableDirectory()
+{
+    namespace fs = std::filesystem;
+    std::error_code error;
+
+#if defined(_WIN32)
+    wchar_t buffer[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+    if (length > 0 && length < MAX_PATH)
+    {
+        return fs::path(std::wstring(buffer, length)).parent_path();
+    }
+#elif defined(__APPLE__)
+    char buffer[4096];
+    uint32_t size = sizeof(buffer);
+    if (_NSGetExecutablePath(buffer, &size) == 0)
+    {
+        return fs::weakly_canonical(buffer, error).parent_path();
+    }
+#else
+    const fs::path path = fs::read_symlink("/proc/self/exe", error);
+    if (!error)
+    {
+        return path.parent_path();
+    }
+#endif
+    return {};
+}
+
+} // namespace
+
 std::string findResource(const std::string& relativePath)
 {
     namespace fs = std::filesystem;
 
+    // Next to the executable first, so a downloaded release works from any folder.
+    const fs::path nextToExecutable = executableDirectory() / relativePath;
+    if (fs::exists(nextToExecutable))
+    {
+        return nextToExecutable.string();
+    }
     if (fs::exists(relativePath))
     {
         return relativePath;

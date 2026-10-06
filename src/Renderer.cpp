@@ -100,6 +100,30 @@ void Renderer::drawNode(const Scene& scene, int node)
     sf::Color outline = reachable ? theme::NODE_OUTLINE : theme::NODE_UNREACHABLE_OUTLINE;
     sf::Color labelColor = reachable ? theme::TEXT : theme::TEXT_DIM;
 
+    if (scene.animating())
+    {
+        // Don't reveal which nodes are reachable before the algorithm gets there.
+        const Snapshot& snapshot = *scene.snapshot;
+        fill = theme::NODE_FILL;
+        outline = theme::NODE_OUTLINE;
+        labelColor = theme::TEXT;
+
+        if (snapshot.settled[node])
+        {
+            fill = theme::SETTLED_FILL;
+            outline = theme::PATH;
+        }
+        else if (snapshot.distance[node] != INF)
+        {
+            outline = theme::RELAX;
+        }
+        if (node == snapshot.current)
+        {
+            drawCircle(position, NODE_RADIUS + 9.f, withAlpha(theme::RELAX, 70), sf::Color::Transparent, 0.f);
+            outline = theme::RELAX;
+        }
+    }
+
     if (isStart || isEnd)
     {
         const sf::Color accent = isStart ? theme::START : theme::END;
@@ -128,30 +152,65 @@ void Renderer::drawWorld(const Scene& scene)
 {
     const Graph& graph = scene.graph;
 
-    const std::vector<int> path = scene.paths.pathTo(scene.end);
+    auto key = [](int a, int b) { return std::make_pair(std::min(a, b), std::max(a, b)); };
+
+    // Edges drawn as part of the result: the shortest path, or while the algorithm
+    // is running, the tree of best known routes so far.
     std::set<std::pair<int, int>> onPath;
-    for (std::size_t i = 1; i < path.size(); ++i)
+    const bool partial = scene.animating() && !scene.finished();
+    if (partial)
     {
-        onPath.insert({std::min(path[i - 1], path[i]), std::max(path[i - 1], path[i])});
+        for (int node = 0; node < graph.nodeCount(); ++node)
+        {
+            if (scene.snapshot->parent[node] != -1)
+            {
+                onPath.insert(key(scene.snapshot->parent[node], node));
+            }
+        }
+    }
+    else
+    {
+        const std::vector<int> path = scene.paths.pathTo(scene.end);
+        for (std::size_t i = 1; i < path.size(); ++i)
+        {
+            onPath.insert(key(path[i - 1], path[i]));
+        }
     }
 
-    // Plain edges first, the shortest path on top of them.
+    // Edges examined by the latest step.
+    std::set<std::pair<int, int>> relaxed;
+    if (scene.animating())
+    {
+        for (int node : scene.snapshot->relaxedNow)
+        {
+            relaxed.insert(key(scene.snapshot->current, node));
+        }
+    }
+
+    // Plain edges first, the highlighted ones on top of them.
     for (const Link& link : graph.links())
     {
-        if (!onPath.count({std::min(link.a, link.b), std::max(link.a, link.b)}))
+        if (!onPath.count(key(link.a, link.b)))
         {
             drawLine(graph.position(link.a), graph.position(link.b), 2.f, theme::EDGE);
         }
     }
-    for (std::size_t i = 1; i < path.size(); ++i)
+    for (const auto& [a, b] : onPath)
     {
-        drawLine(graph.position(path[i - 1]), graph.position(path[i]), 6.f, theme::PATH);
+        drawLine(graph.position(a), graph.position(b), partial ? 4.f : 6.f,
+                 partial ? withAlpha(theme::PATH, 150) : theme::PATH);
+    }
+    for (const auto& [a, b] : relaxed)
+    {
+        drawLine(graph.position(a), graph.position(b), 5.f, theme::RELAX);
     }
 
     // Edge weights sit on a small background so they stay readable over lines.
     for (const Link& link : graph.links())
     {
-        const bool highlighted = onPath.count({std::min(link.a, link.b), std::max(link.a, link.b)}) > 0;
+        const bool isRelaxed = relaxed.count(key(link.a, link.b)) > 0;
+        const bool highlighted = isRelaxed || onPath.count(key(link.a, link.b)) > 0;
+        const sf::Color pillColor = isRelaxed ? theme::RELAX : theme::PATH;
         const sf::Vector2f middle = (graph.position(link.a) + graph.position(link.b)) / 2.f;
         const std::string label = std::to_string(link.weight);
 
@@ -162,7 +221,7 @@ void Renderer::drawWorld(const Scene& scene)
         sf::RectangleShape pill({bounds.width + 12.f, 20.f});
         pill.setOrigin(pill.getSize() / 2.f);
         pill.setPosition(middle);
-        pill.setFillColor(highlighted ? theme::PATH : theme::BACKGROUND);
+        pill.setFillColor(highlighted ? pillColor : theme::BACKGROUND);
         target_.draw(pill);
 
         drawLabel(label, middle, 14, highlighted ? theme::BACKGROUND : theme::EDGE_LABEL);
@@ -173,13 +232,37 @@ void Renderer::drawWorld(const Scene& scene)
         drawNode(scene, node);
     }
 
+    // Current distance of every node the algorithm has found so far.
+    if (scene.animating())
+    {
+        for (int node = 0; node < graph.nodeCount(); ++node)
+        {
+            const int distance = scene.snapshot->distance[node];
+            if (distance != INF)
+            {
+                const std::string label = std::to_string(distance);
+                const sf::Vector2f center = graph.position(node) + sf::Vector2f(0.f, NODE_RADIUS + 16.f);
+
+                text_.setString(label);
+                text_.setCharacterSize(14);
+                sf::RectangleShape backing({text_.getLocalBounds().width + 8.f, 18.f});
+                backing.setOrigin(backing.getSize() / 2.f);
+                backing.setPosition(center);
+                backing.setFillColor(theme::BACKGROUND);
+                target_.draw(backing);
+
+                drawLabel(label, center, 14, scene.snapshot->settled[node] ? theme::PATH : theme::RELAX);
+            }
+        }
+    }
+
     // Badges go last so they are never covered by other nodes.
     const float badgeOffset = NODE_RADIUS + 28.f;
     if (graph.isValid(scene.start))
     {
         drawBadge("START", graph.position(scene.start) - sf::Vector2f(0.f, badgeOffset), theme::START, theme::BACKGROUND);
     }
-    if (graph.isValid(scene.end) && scene.end != scene.start)
+    if (graph.isValid(scene.end) && scene.end != scene.start && (!scene.animating() || scene.finished()))
     {
         const std::string label = scene.paths.reachable(scene.end)
                                       ? kilometres(scene.paths.distance[scene.end])
@@ -187,7 +270,7 @@ void Renderer::drawWorld(const Scene& scene)
         drawBadge(label, graph.position(scene.end) - sf::Vector2f(0.f, badgeOffset), theme::END, theme::BACKGROUND);
     }
 
-    if (scene.hovered != -1 && scene.hovered != scene.start && scene.hovered != scene.end)
+    if (!scene.animating() && scene.hovered != -1 && scene.hovered != scene.start && scene.hovered != scene.end)
     {
         const std::string label = scene.paths.reachable(scene.hovered)
                                       ? kilometres(scene.paths.distance[scene.hovered])
@@ -208,18 +291,38 @@ void Renderer::drawHud(const Scene& scene)
     const float left = 16.f;
     const float padding = 18.f;
     const float panelWidth = 340.f;
-    const float keyColumn = 112.f;
+    const float keyColumn = 122.f;
 
     std::vector<Row> status;
     status.push_back({"Start", "#" + std::to_string(scene.start), theme::START});
     status.push_back({"End", "#" + std::to_string(scene.end), theme::END});
-    if (scene.paths.reachable(scene.end))
+    if (scene.animating())
     {
-        status.push_back({"Distance", kilometres(scene.paths.distance[scene.end]), theme::PATH});
+        status.push_back({"Step", std::to_string(scene.step) + " / " + std::to_string(scene.stepCount), theme::TEXT});
+        std::string speed = std::to_string(scene.stepsPerSecond);
+        speed.erase(speed.find('.') + 2);
+        status.push_back({"State",
+                          scene.finished() ? "finished" : (scene.playing ? "playing  x" + speed : "paused  x" + speed),
+                          theme::TEXT});
+
+        if (scene.snapshot->current != -1)
+        {
+            const int current = scene.snapshot->current;
+            status.push_back({"Settled", "#" + std::to_string(current) + "  (" + kilometres(scene.snapshot->distance[current]) + ")", theme::PATH});
+            const std::size_t improved = scene.snapshot->relaxedNow.size();
+            status.push_back({"Relaxed", std::to_string(improved) + (improved == 1 ? " edge" : " edges"), theme::RELAX});
+        }
     }
-    else
+    if (!scene.animating() || scene.finished())
     {
-        status.push_back({"Distance", "unreachable", theme::ERROR});
+        if (scene.paths.reachable(scene.end))
+        {
+            status.push_back({"Distance", kilometres(scene.paths.distance[scene.end]), theme::PATH});
+        }
+        else
+        {
+            status.push_back({"Distance", "unreachable", theme::ERROR});
+        }
     }
 
     std::vector<Row> help;
@@ -233,7 +336,12 @@ void Renderer::drawHud(const Scene& scene)
             {"Middle drag", "pan", theme::TEXT},
             {"Wheel", "zoom", theme::TEXT},
             {"Home", "fit view", theme::TEXT},
-            {"Esc", "cancel linking", theme::TEXT},
+            {"S", "step-by-step mode", theme::TEXT},
+            {"Space", "play / pause", theme::TEXT},
+            {"Left / Right", "previous / next step", theme::TEXT},
+            {"Up / Down", "animation speed", theme::TEXT},
+            {"End", "skip to result", theme::TEXT},
+            {"Esc", "cancel link / exit mode", theme::TEXT},
             {"H", "hide help", theme::TEXT},
         };
     }

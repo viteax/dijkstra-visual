@@ -21,6 +21,16 @@ struct Scene
     int pendingLink = -1; // first node of a link that is being created
     int hovered = -1;
     bool showHelp = true;
+
+    // Set while the algorithm is being animated.
+    const Snapshot* snapshot = nullptr;
+    int step = 0;
+    int stepCount = 0;
+    bool playing = false;
+    float stepsPerSecond = 1.f;
+
+    bool animating() const { return snapshot != nullptr; }
+    bool finished() const { return snapshot != nullptr && step >= stepCount; }
 };
 
 class Renderer
