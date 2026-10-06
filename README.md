@@ -6,6 +6,14 @@ An interactive visualization of Dijkstra's shortest path algorithm, written in C
 
 Pick a start and an end node and the shortest route lights up immediately. Edit the graph while the program is running and the result is recalculated on the fly.
 
+## Download
+
+Ready-to-run builds for Windows, Linux and macOS (Apple Silicon) are on the [Releases page](../../releases). Unpack the archive and run `dijkstra-visual`; nothing else has to be installed. Without arguments the program asks in the console whether to load the sample graph (`F`) or generate a random one (`R`).
+
+- **Windows:** SmartScreen may warn about an unsigned app; choose "More info" and "Run anyway".
+- **macOS:** the app isn't notarized. Remove the quarantine flag once with `xattr -dr com.apple.quarantine dijkstra-visual/` and run it from the terminal.
+- **Linux:** needs the usual desktop libraries (X11, OpenGL, FreeType), which every desktop distribution has.
+
 ## Features
 
 - Build a graph from files or generate a random connected one
@@ -64,7 +72,24 @@ cmake --build build --config Release
 build\Release\dijkstra-visual.exe
 ```
 
-The `assets` and `data` folders are copied next to the executable after each build.
+The `assets` and `data` folders are copied next to the executable after each build, and the program looks for them there first.
+
+To get a self-contained folder like the one in the release archives:
+
+```sh
+cmake --install build --component app --prefix dist/dijkstra-visual
+```
+
+## Releasing
+
+Releases are built by GitHub Actions. Push a tag that starts with `v` and the workflow builds the three packages and attaches them to a new GitHub Release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Every pull request builds the same packages too; they can be downloaded from the workflow run's artifacts.
 
 ## Running
 

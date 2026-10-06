@@ -16,6 +16,11 @@ if(NOT SFML_FOUND)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
     set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
+    if(MSVC)
+        # No Visual C++ redistributable needed to run the executable.
+        set(SFML_USE_STATIC_STD_LIBS ON CACHE BOOL "" FORCE)
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
     FetchContent_Declare(SFML
         GIT_REPOSITORY https://github.com/SFML/SFML.git
         GIT_TAG 2.6.1
@@ -45,3 +50,8 @@ endif()
 add_custom_command(TARGET dijkstra-visual POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:dijkstra-visual>/assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/data $<TARGET_FILE_DIR:dijkstra-visual>/data)
+
+# `cmake --install build --component app --prefix <dir>` produces a ready-to-run folder.
+install(TARGETS dijkstra-visual RUNTIME DESTINATION . COMPONENT app)
+install(DIRECTORY assets data DESTINATION . COMPONENT app)
+install(FILES README.md DESTINATION . COMPONENT app)
